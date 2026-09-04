@@ -398,9 +398,13 @@
 (function(){
   const MAX_FILE_BYTES = 3 * 1024 * 1024; // 3MB raw
   const MAX_ITEMS = 40;
+  const POLL_MS = 3000;
+  const LAST_ROOM_KEY = 'last-room';
   let roomCode = null;
   let pollTimer = null;
   let items = [];
+  let hasLoadedOnce = false;
+  let isSaving = false;
 
   const el = id => document.getElementById(id);
   const toast = (msg) => {
@@ -419,6 +423,19 @@
   }
 
   el('generatedCode').textContent = randomCode();
+
+  // 嘗試恢復上次停留的房間（跨重新整理、跨裝置都靠這個雲端記錄）
+  (async function tryRestoreRoom(){
+    try{
+      const res = await window.storage.get(LAST_ROOM_KEY, false);
+      if(res && res.value){
+        await enterRoom(res.value, true);
+      }
+    }catch(e){
+      // 沒有上次的房間紀錄，維持在加入畫面
+    }
+  })();
+
   el('createRoomBtn').addEventListener('click', () => {
     const regen = randomCode();
     enterRoom(el('generatedCode').textContent || regen);
@@ -431,13 +448,16 @@
     enterRoom(v);
   });
 
-  el('leaveBtn').addEventListener('click', () => {
+  el('leaveBtn').addEventListener('click', async () => {
     if(pollTimer) clearInterval(pollTimer);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
     roomCode = null;
     items = [];
+    hasLoadedOnce = false;
     el('roomScreen').classList.add('hidden');
     el('joinScreen').classList.remove('hidden');
     el('generatedCode').textContent = randomCode();
+    try{ await window.storage.delete(LAST_ROOM_KEY, false); }catch(e){}
   });
 
   // Tabs
@@ -450,14 +470,24 @@
     el('panelFile').classList.toggle('hidden', which!=='file');
   }
 
-  async function enterRoom(code){
+  function onVisibilityChange(){
+    if(document.visibilityState === 'visible' && roomCode){
+      loadItems(false);
+    }
+  }
+
+  async function enterRoom(code, isRestoring){
     roomCode = code.toUpperCase();
+    hasLoadedOnce = false;
     el('activeCode').textContent = roomCode;
     el('joinScreen').classList.add('hidden');
     el('roomScreen').classList.remove('hidden');
+    try{ await window.storage.set(LAST_ROOM_KEY, roomCode, false); }catch(e){}
     await loadItems(true);
     if(pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(() => loadItems(false), 4000);
+    pollTimer = setInterval(() => loadItems(false), POLL_MS);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    document.addEventListener('visibilitychange', onVisibilityChange);
   }
 
   function storageKey(){
