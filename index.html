@@ -617,6 +617,8 @@
 
     feed.querySelectorAll('button[data-action="delete"]').forEach(btn => {
       btn.addEventListener('click', async () => {
+        recentlyDeleted.set(btn.dataset.id, Date.now());
+        recentlyAdded.delete(btn.dataset.id);
         items = items.filter(i => i.id !== btn.dataset.id);
         renderFeed();
         await saveItems();
@@ -641,7 +643,9 @@
   el('sendTextBtn').addEventListener('click', async () => {
     const val = el('textInput').value.trim();
     if(!val){ toast('請先輸入文字'); return; }
-    items.push({ id: genId(), type:'text', content: val, ts: Date.now() });
+    const id = genId();
+    recentlyAdded.set(id, Date.now());
+    items.push({ id, type:'text', content: val, ts: Date.now() });
     renderFeed();
     el('textInput').value = '';
     await saveItems();
@@ -671,8 +675,10 @@
     el('fileDropLabel').textContent = '讀取中…';
     const reader = new FileReader();
     reader.onload = async () => {
+      const id = genId();
+      recentlyAdded.set(id, Date.now());
       items.push({
-        id: genId(),
+        id,
         type: 'file',
         content: reader.result, // data URL
         name: file.name,
