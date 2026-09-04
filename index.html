@@ -494,16 +494,24 @@
     return 'dropbox-room:' + roomCode;
   }
 
-  async function loadItems(showToastOnFail){
+  async function loadItems(isInitial){
+    // 正在寫入時跳過這次同步，避免用還沒更新的舊資料把剛送出的內容蓋掉
+    if(isSaving) return;
     try{
       const res = await window.storage.get(storageKey(), true);
       const data = res && res.value ? JSON.parse(res.value) : [];
       items = Array.isArray(data) ? data : [];
+      hasLoadedOnce = true;
       renderFeed();
     }catch(e){
-      // key not found yet — treat as empty room
-      items = [];
-      renderFeed();
+      if(!hasLoadedOnce){
+        // 第一次載入且找不到資料，代表這是全新房間，畫面顯示空白即可
+        items = [];
+        hasLoadedOnce = true;
+        renderFeed();
+      }
+      // 已經載入過的情況下發生錯誤，很可能只是暫時性問題：
+      // 保留目前畫面上的內容，不要清空，等下一次同步再試
     }
   }
 
@@ -512,6 +520,7 @@
     if(items.length > MAX_ITEMS){
       items = items.slice(items.length - MAX_ITEMS);
     }
+    isSaving = true;
     try{
       const result = await window.storage.set(storageKey(), JSON.stringify(items), true);
       if(!result) throw new Error('儲存失敗');
@@ -519,6 +528,8 @@
       toast('儲存失敗，可能是內容太大或太多，已自動移除最舊的一筆');
       items.shift();
       try{ await window.storage.set(storageKey(), JSON.stringify(items), true); }catch(e2){}
+    }finally{
+      isSaving = false;
     }
   }
 
