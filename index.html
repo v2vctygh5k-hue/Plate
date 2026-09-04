@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>傳輸站</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #1B1E2B;
+    --surface: #242838;
+    --surface-2: #2D3245;
+    --border: #3A4059;
+    --accent: #E8A33D;
+    --accent-dim: #6b5330;
+    --text: #EDEAE3;
+    --text-muted: #8A8FA3;
+    --success: #6FA97A;
+    --danger: #C96A5C;
+    --radius: 10px;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    min-height: 100vh;
+  }
+  .mono{ font-family: 'IBM Plex Mono', monospace; }
+
+  .app{
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 24px 18px 60px;
+    min-height: 100vh;
+    display:flex;
+    flex-direction:column;
+  }
+
+  /* ---------- Join screen ---------- */
+  .join-screen{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    gap: 32px;
+  }
+  .brand{
+    text-align:center;
+  }
+  .brand h1{
+    font-size: 28px;
+    font-weight:700;
+    margin:0 0 6px;
+    letter-spacing: -0.01em;
+  }
+  .brand p{
+    color: var(--text-muted);
+    margin:0;
+    font-size: 14px;
+    line-height:1.6;
+  }
+
+  .plate{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 20px;
+    text-align:center;
+  }
+  .plate-label{
+    font-size:12px;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+  }
+  .plate-code{
+    font-size: 42px;
+    font-weight:600;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    text-shadow: 0 0 24px var(--accent-dim);
+    margin-bottom: 18px;
+    word-break: break-all;
+  }
+  .btn{
+    appearance:none;
+    border:none;
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-family:'Space Grotesk',sans-serif;
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+    transition: transform .12s ease, opacity .12s ease;
+  }
+  .btn:active{ transform: scale(0.97); }
+  .btn-primary{
+    background: var(--accent);
+    color: #241B0C;
+    width:100%;
+  }
+  .btn-primary:hover{ opacity:0.92; }
+  .btn-ghost{
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover{ color: var(--text); border-color: var(--text-muted); }
+  .btn-danger{
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid var(--border);
+  }
+
+  .divider-row{
+    display:flex; align-items:center; gap:12px;
+    color: var(--text-muted); font-size:12px;
+  }
+  .divider-row .line{ flex:1; height:1px; background: var(--border); }
+
+  .join-form{
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .join-form input{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 16px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-align:center;
+  }
+  .join-form input:focus{ outline:none; border-color: var(--accent); }
+
+  /* ---------- Room screen ---------- */
+  .room-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom: 20px;
+    gap: 12px;
+  }
+  .room-code-chip{
+    display:flex; align-items:center; gap:10px;
+    background: var(--surface);
+    border:1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+  }
+  .room-code-chip .dot{
+    width:8px;height:8px;border-radius:50%;
+    background: var(--success);
+    flex-shrink:0;
+  }
+  .room-code-chip span{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:16px;
+    letter-spacing:0.1em;
+    color: var(--accent);
+  }
+  .copy-hint{
+    font-size:11px;
+    color: var(--text-muted);
+  }
+  .leave-btn{
+    background:none; border:none; color: var(--text-muted);
+    font-size:13px; cursor:pointer; text-decoration:underline;
+    font-family:'Space Grotesk',sans-serif;
+  }
+  .leave-btn:hover{ color: var(--text); }
+
+  .drop-zone{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 24px;
+  }
+  .tabs{
+    display:flex; gap:6px; margin-bottom:12px;
+  }
+  .tab-btn{
+    flex:1;
+    background: var(--surface-2);
+    border:1px solid transparent;
+    color: var(--text-muted);
+    padding: 8px;
+    border-radius: 6px;
+    font-family:'Space Grotesk',sans-serif;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .tab-btn.active{
+    background: rgba(232,163,61,0.12);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  textarea{
+    width:100%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 12px;
+    font-family:'Space Grotesk',sans-serif;
+    font-size: 14px;
+    resize: vertical;
+    min-height: 90px;
+    margin-bottom:10px;
+  }
+  textarea:focus{ outline:none; border-color: var(--accent); }
+
+  .file-drop{
+    border: 1.5px dashed var(--border);
+    border-radius: 8px;
+    padding: 26px 12px;
+    text-align:center;
+    cursor:pointer;
+    color: var(--text-muted);
+    font-size: 13px;
+    margin-bottom: 10px;
+    transition: border-color .15s ease, color .15s ease;
+  }
+  .file-drop.dragover{
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .file-drop input{ display:none; }
+  .file-hint{ font-size:11px; color: var(--text-muted); margin-top:4px; }
+
+  .feed{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .feed-empty{
+    text-align:center;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 40px 10px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+  }
+  .item{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display:flex;
+    gap: 12px;
+    align-items:flex-start;
+  }
+  .item-icon{
+    width: 34px; height:34px;
+    border-radius:7px;
+    background: var(--surface-2);
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+    font-size: 15px;
+  }
+  .item-body{ flex:1; min-width:0; }
+  .item-text{
+    font-size: 14px;
+    line-height:1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0 0 6px;
+  }
+  .item-filename{
+    font-size:14px;
+    font-weight:600;
+    margin:0 0 2px;
+    word-break: break-all;
+  }
+  .item-meta{
+    font-size: 11px;
+    color: var(--text-muted);
+    display:flex; gap:8px; flex-wrap:wrap;
+  }
+  .item-actions{
+    display:flex; gap:8px; margin-top:8px;
+  }
+  .item-actions button, .item-actions a{
+    font-size:12px;
+    color: var(--text-muted);
+    background:none;
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding: 4px 10px;
+    cursor:pointer;
+    text-decoration:none;
+    font-family:'Space Grotesk',sans-serif;
+  }
+  .item-actions button:hover, .item-actions a:hover{ color: var(--text); border-color: var(--text-muted); }
+
+  .toast{
+    position: fixed;
+    bottom: 20px;
+    left:50%;
+    transform: translateX(-50%);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    opacity:0;
+    pointer-events:none;
+    transition: opacity .2s ease, transform .2s ease;
+    z-index: 100;
+  }
+  .toast.show{
+    opacity:1;
+    transform: translateX(-50%) translateY(-6px);
+  }
+
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <!-- JOIN SCREEN -->
+  <div class="join-screen" id="joinScreen">
+    <div class="brand">
+      <h1>傳輸站</h1>
+      <p>用一組代碼連接你的手機和電腦<br>貼上文字或丟進檔案，另一台裝置馬上看得到</p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-label">你的新房間代碼</div>
+      <div class="plate-code mono" id="generatedCode">------</div>
+      <button class="btn btn-primary" id="createRoomBtn">建立房間</button>
+    </div>
+
+    <div class="divider-row">
+      <div class="line"></div>
+      <span>或加入已有的房間</span>
+      <div class="line"></div>
+    </div>
+
+    <form class="join-form" id="joinForm">
+      <input type="text" id="joinCodeInput" placeholder="輸入房間代碼" maxlength="6" autocomplete="off">
+      <button type="submit" class="btn btn-ghost">加入房間</button>
+    </form>
+  </div>
+
+  <!-- ROOM SCREEN -->
+  <div class="hidden" id="roomScreen">
+    <div class="room-header">
+      <div>
+        <div class="room-code-chip">
+          <div class="dot"></div>
+          <span id="activeCode">------</span>
+        </div>
+        <div class="copy-hint">在另一台裝置輸入這組代碼即可同步</div>
+      </div>
+      <button class="leave-btn" id="leaveBtn">離開</button>
+    </div>
+
+    <div class="drop-zone">
+      <div class="tabs">
+        <button class="tab-btn active" id="tabText">文字</button>
+        <button class="tab-btn" id="tabFile">檔案</button>
+      </div>
+
+      <div id="panelText">
+        <textarea id="textInput" placeholder="貼上或輸入文字…"></textarea>
+        <button class="btn btn-primary" id="sendTextBtn">傳送文字</button>
+      </div>
+
+      <div id="panelFile" class="hidden">
+        <label class="file-drop" id="fileDrop">
+          <input type="file" id="fileInput">
+          <div id="fileDropLabel">點擊選擇檔案，或拖曳到這裡</div>
+        </label>
+        <div class="file-hint">單一檔案上限約 3MB</div>
+      </div>
+    </div>
+
+    <div class="feed" id="feed">
+      <div class="feed-empty">還沒有任何內容</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  const MAX_FILE_BYTES = 3 * 1024 * 1024; // 3MB raw
+  const MAX_ITEMS = 40;
+  let roomCode = null;
+  let pollTimer = null;
+  let items = [];
+
+  const el = id => document.getElementById(id);
+  const toast = (msg) => {
+    const t = el('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toast._h);
+    toast._h = setTimeout(()=> t.classList.remove('show'), 2200);
+  };
+
+  function randomCode(){
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let s = '';
+    for(let i=0;i<5;i++) s += chars[Math.floor(Math.random()*chars.length)];
+    return s;
+  }
+
+  el('generatedCode').textContent = randomCode();
+  el('createRoomBtn').addEventListener('click', () => {
+    const regen = randomCode();
+    enterRoom(el('generatedCode').textContent || regen);
+  });
+
+  el('joinForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = el('joinCodeInput').value.trim().toUpperCase();
+    if(!v){ toast('請輸入房間代碼'); return; }
+    enterRoom(v);
+  });
+
+  el('leaveBtn').addEventListener('click', () => {
+    if(pollTimer) clearInterval(pollTimer);
+    roomCode = null;
+    items = [];
+    el('roomScreen').classList.add('hidden');
+    el('joinScreen').classList.remove('hidden');
+    el('generatedCode').textContent = randomCode();
+  });
+
+  // Tabs
+  el('tabText').addEventListener('click', () => switchTab('text'));
+  el('tabFile').addEventListener('click', () => switchTab('file'));
+  function switchTab(which){
+    el('tabText').classList.toggle('active', which==='text');
+    el('tabFile').classList.toggle('active', which==='file');
+    el('panelText').classList.toggle('hidden', which!=='text');
+    el('panelFile').classList.toggle('hidden', which!=='file');
+  }
+
+  async function enterRoom(code){
+    roomCode = code.toUpperCase();
+    el('activeCode').textContent = roomCode;
+    el('joinScreen').classList.add('hidden');
+    el('roomScreen').classList.remove('hidden');
+    await loadItems(true);
+    if(pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(() => loadItems(false), 4000);
+  }
+
+  function storageKey(){
+    return 'dropbox-room:' + roomCode;
+  }
+
+  async function loadItems(showToastOnFail){
+    try{
+      const res = await window.storage.get(storageKey(), true);
+      const data = res && res.value ? JSON.parse(res.value) : [];
+      items = Array.isArray(data) ? data : [];
+      renderFeed();
+    }catch(e){
+      // key not found yet — treat as empty room
+      items = [];
+      renderFeed();
+    }
+  }
+
+  async function saveItems(){
+    // keep only the most recent MAX_ITEMS to respect size limits
+    if(items.length > MAX_ITEMS){
+      items = items.slice(items.length - MAX_ITEMS);
+    }
+    try{
+      const result = await window.storage.set(storageKey(), JSON.stringify(items), true);
+      if(!result) throw new Error('儲存失敗');
+    }catch(e){
+      toast('儲存失敗，可能是內容太大或太多，已自動移除最舊的一筆');
+      items.shift();
+      try{ await window.storage.set(storageKey(), JSON.stringify(items), true); }catch(e2){}
+    }
+  }
+
+  function fmtTime(ts){
+    const d = new Date(ts);
+    return d.toLocaleString('zh-TW', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+  }
+
+  function fmtSize(bytes){
+    if(bytes < 1024) return bytes + ' B';
+    if(bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+    return (bytes/1024/1024).toFixed(2) + ' MB';
+  }
+
+  function renderFeed(){
+    const feed = el('feed');
+    if(items.length === 0){
+      feed.innerHTML = '<div class="feed-empty">還沒有任何內容</div>';
+      return;
+    }
+    const sorted = [...items].sort((a,b)=> b.ts - a.ts);
+    feed.innerHTML = '';
+    sorted.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'item';
+      if(item.type === 'text'){
+        div.innerHTML = `
+          <div class="item-icon">✎</div>
+          <div class="item-body">
+            <p class="item-text"></p>
+            <div class="item-meta"><span class="mono">${fmtTime(item.ts)}</span></div>
+            <div class="item-actions">
+              <button data-action="copy" data-id="${item.id}">複製</button>
+              <button data-action="delete" data-id="${item.id}">刪除</button>
+            </div>
+          </div>`;
+        div.querySelector('.item-text').textContent = item.content;
+      } else {
+        div.innerHTML = `
+          <div class="item-icon">📎</div>
+          <div class="item-body">
+            <p class="item-filename"></p>
+            <div class="item-meta">
+              <span class="mono">${fmtTime(item.ts)}</span>
+              <span class="mono">${fmtSize(item.size)}</span>
+            </div>
+            <div class="item-actions">
+              <a href="${item.content}" download="${item.name}">下載</a>
+              <button data-action="delete" data-id="${item.id}">刪除</button>
+            </div>
+          </div>`;
+        div.querySelector('.item-filename').textContent = item.name;
+      }
+      feed.appendChild(div);
+    });
+
+    feed.querySelectorAll('button[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        items = items.filter(i => i.id !== btn.dataset.id);
+        renderFeed();
+        await saveItems();
+        toast('已刪除');
+      });
+    });
+    feed.querySelectorAll('button[data-action="copy"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const found = items.find(i => i.id === btn.dataset.id);
+        if(found){
+          navigator.clipboard.writeText(found.content).then(()=> toast('已複製到剪貼簿'))
+            .catch(()=> toast('複製失敗，請手動選取'));
+        }
+      });
+    });
+  }
+
+  function genId(){
+    return Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+  }
+
+  el('sendTextBtn').addEventListener('click', async () => {
+    const val = el('textInput').value.trim();
+    if(!val){ toast('請先輸入文字'); return; }
+    items.push({ id: genId(), type:'text', content: val, ts: Date.now() });
+    renderFeed();
+    el('textInput').value = '';
+    await saveItems();
+    toast('已傳送');
+  });
+
+  // File handling
+  const fileInput = el('fileInput');
+  const fileDrop = el('fileDrop');
+
+  fileInput.addEventListener('change', (e) => {
+    if(e.target.files && e.target.files[0]) handleFile(e.target.files[0]);
+  });
+  fileDrop.addEventListener('dragover', (e) => { e.preventDefault(); fileDrop.classList.add('dragover'); });
+  fileDrop.addEventListener('dragleave', () => fileDrop.classList.remove('dragover'));
+  fileDrop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    fileDrop.classList.remove('dragover');
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+
+  function handleFile(file){
+    if(file.size > MAX_FILE_BYTES){
+      toast('檔案太大，請控制在 3MB 以內');
+      return;
+    }
+    el('fileDropLabel').textContent = '讀取中…';
+    const reader = new FileReader();
+    reader.onload = async () => {
+      items.push({
+        id: genId(),
+        type: 'file',
+        content: reader.result, // data URL
+        name: file.name,
+        mime: file.type,
+        size: file.size,
+        ts: Date.now()
+      });
+      renderFeed();
+      el('fileDropLabel').textContent = '點擊選擇檔案，或拖曳到這裡';
+      fileInput.value = '';
+      await saveItems();
+      toast('已傳送');
+    };
+    reader.onerror = () => {
+      toast('讀取檔案失敗');
+      el('fileDropLabel').textContent = '點擊選擇檔案，或拖曳到這裡';
+    };
+    reader.readAsDataURL(file);
+  }
+
+})();
+</script>
+
+</body>
+</html>
