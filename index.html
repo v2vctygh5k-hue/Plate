@@ -399,12 +399,15 @@
   const MAX_FILE_BYTES = 3 * 1024 * 1024; // 3MB raw
   const MAX_ITEMS = 40;
   const POLL_MS = 3000;
+  const GRACE_MS = 8000; // 剛送出的項目在這段時間內不會被舊的同步資料蓋掉
   const LAST_ROOM_KEY = 'last-room';
   let roomCode = null;
   let pollTimer = null;
   let items = [];
   let hasLoadedOnce = false;
   let isSaving = false;
+  const recentlyAdded = new Map(); // id -> local timestamp when added
+  const recentlyDeleted = new Map(); // id -> local timestamp when deleted
 
   const el = id => document.getElementById(id);
   const toast = (msg) => {
@@ -494,13 +497,39 @@
     return 'dropbox-room:' + roomCode;
   }
 
+  function pruneMap(map){
+    const now = Date.now();
+    for(const [id, ts] of map){
+      if(now - ts > GRACE_MS) map.delete(id);
+    }
+  }
+
+  function mergeRemote(remoteItems){
+    pruneMap(recentlyAdded);
+    pruneMap(recentlyDeleted);
+    const now = Date.now();
+    const map = new Map(remoteItems.map(i => [i.id, i]));
+
+    // 剛刪除的項目：就算遠端還沒同步到，也先不要讓它復活
+    for(const id of recentlyDeleted.keys()){
+      map.delete(id);
+    }
+    // 剛新增的項目：就算遠端還沒同步到，也先保留在畫面上
+    items.forEach(local => {
+      if(!map.has(local.id) && recentlyAdded.has(local.id)){
+        map.set(local.id, local);
+      }
+    });
+    return Array.from(map.values());
+  }
+
   async function loadItems(isInitial){
-    // 正在寫入時跳過這次同步，避免用還沒更新的舊資料把剛送出的內容蓋掉
     if(isSaving) return;
     try{
       const res = await window.storage.get(storageKey(), true);
       const data = res && res.value ? JSON.parse(res.value) : [];
-      items = Array.isArray(data) ? data : [];
+      const remote = Array.isArray(data) ? data : [];
+      items = mergeRemote(remote);
       hasLoadedOnce = true;
       renderFeed();
     }catch(e){
