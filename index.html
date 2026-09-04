@@ -6,6 +6,8 @@
 <title>傳輸站</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
 <style>
   :root{
     --bg: #1B1E2B;
@@ -397,17 +399,26 @@
 <script>
 (function(){
   const MAX_FILE_BYTES = 3 * 1024 * 1024; // 3MB raw
-  const MAX_ITEMS = 40;
-  const POLL_MS = 3000;
-  const GRACE_MS = 8000; // 剛送出的項目在這段時間內不會被舊的同步資料蓋掉
-  const LAST_ROOM_KEY = 'last-room';
+  const MAX_ITEMS = 60;
+  const LAST_ROOM_KEY = 'plate_last_room';
+
+  // ------- Firebase 設定 -------
+  const firebaseConfig = {
+    apiKey: "AIzaSyAtK7uO3Hvzh_A0igjcAIQIgGp6gNRCE0o",
+    authDomain: "plat-a15cf.firebaseapp.com",
+    databaseURL: "https://plat-a15cf-default-rtdb.firebaseio.com/",
+    projectId: "plat-a15cf",
+    storageBucket: "plat-a15cf.firebasestorage.app",
+    messagingSenderId: "464587335764",
+    appId: "1:464587335764:web:0bd610a575e24b40d665c1"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
   let roomCode = null;
-  let pollTimer = null;
-  let items = [];
-  let hasLoadedOnce = false;
-  let isSaving = false;
-  const recentlyAdded = new Map(); // id -> local timestamp when added
-  const recentlyDeleted = new Map(); // id -> local timestamp when deleted
+  let itemsRef = null;
+  let itemsListener = null;
+  let items = []; // [{id, type, content, name, mime, size, ts}]
 
   const el = id => document.getElementById(id);
   const toast = (msg) => {
@@ -427,21 +438,14 @@
 
   el('generatedCode').textContent = randomCode();
 
-  // 嘗試恢復上次停留的房間（跨重新整理、跨裝置都靠這個雲端記錄）
-  (async function tryRestoreRoom(){
-    try{
-      const res = await window.storage.get(LAST_ROOM_KEY, false);
-      if(res && res.value){
-        await enterRoom(res.value, true);
-      }
-    }catch(e){
-      // 沒有上次的房間紀錄，維持在加入畫面
-    }
-  })();
+  // 頁面載入時，如果瀏覽器記得上次的房間，就自動回去
+  const savedRoom = localStorage.getItem(LAST_ROOM_KEY);
+  if(savedRoom){
+    enterRoom(savedRoom);
+  }
 
   el('createRoomBtn').addEventListener('click', () => {
-    const regen = randomCode();
-    enterRoom(el('generatedCode').textContent || regen);
+    enterRoom(el('generatedCode').textContent || randomCode());
   });
 
   el('joinForm').addEventListener('submit', (e) => {
@@ -451,16 +455,14 @@
     enterRoom(v);
   });
 
-  el('leaveBtn').addEventListener('click', async () => {
-    if(pollTimer) clearInterval(pollTimer);
-    document.removeEventListener('visibilitychange', onVisibilityChange);
+  el('leaveBtn').addEventListener('click', () => {
+    detachRoom();
+    localStorage.removeItem(LAST_ROOM_KEY);
     roomCode = null;
     items = [];
-    hasLoadedOnce = false;
     el('roomScreen').classList.add('hidden');
     el('joinScreen').classList.remove('hidden');
     el('generatedCode').textContent = randomCode();
-    try{ await window.storage.delete(LAST_ROOM_KEY, false); }catch(e){}
   });
 
   // Tabs
@@ -473,93 +475,33 @@
     el('panelFile').classList.toggle('hidden', which!=='file');
   }
 
-  function onVisibilityChange(){
-    if(document.visibilityState === 'visible' && roomCode){
-      loadItems(false);
+  function detachRoom(){
+    if(itemsRef && itemsListener){
+      itemsRef.off('value', itemsListener);
     }
+    itemsRef = null;
+    itemsListener = null;
   }
 
-  async function enterRoom(code, isRestoring){
+  function enterRoom(code){
+    detachRoom();
     roomCode = code.toUpperCase();
-    hasLoadedOnce = false;
+    localStorage.setItem(LAST_ROOM_KEY, roomCode);
+
     el('activeCode').textContent = roomCode;
     el('joinScreen').classList.add('hidden');
     el('roomScreen').classList.remove('hidden');
-    try{ await window.storage.set(LAST_ROOM_KEY, roomCode, false); }catch(e){}
-    await loadItems(true);
-    if(pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(() => loadItems(false), POLL_MS);
-    document.removeEventListener('visibilitychange', onVisibilityChange);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-  }
+    el('feed').innerHTML = '<div class="feed-empty">連線中…</div>';
 
-  function storageKey(){
-    return 'dropbox-room:' + roomCode;
-  }
-
-  function pruneMap(map){
-    const now = Date.now();
-    for(const [id, ts] of map){
-      if(now - ts > GRACE_MS) map.delete(id);
-    }
-  }
-
-  function mergeRemote(remoteItems){
-    pruneMap(recentlyAdded);
-    pruneMap(recentlyDeleted);
-    const now = Date.now();
-    const map = new Map(remoteItems.map(i => [i.id, i]));
-
-    // 剛刪除的項目：就算遠端還沒同步到，也先不要讓它復活
-    for(const id of recentlyDeleted.keys()){
-      map.delete(id);
-    }
-    // 剛新增的項目：就算遠端還沒同步到，也先保留在畫面上
-    items.forEach(local => {
-      if(!map.has(local.id) && recentlyAdded.has(local.id)){
-        map.set(local.id, local);
-      }
-    });
-    return Array.from(map.values());
-  }
-
-  async function loadItems(isInitial){
-    if(isSaving) return;
-    try{
-      const res = await window.storage.get(storageKey(), true);
-      const data = res && res.value ? JSON.parse(res.value) : [];
-      const remote = Array.isArray(data) ? data : [];
-      items = mergeRemote(remote);
-      hasLoadedOnce = true;
+    itemsRef = db.ref('rooms/' + roomCode + '/items');
+    itemsListener = itemsRef.on('value', (snapshot) => {
+      const val = snapshot.val() || {};
+      items = Object.keys(val).map(id => Object.assign({ id }, val[id]));
       renderFeed();
-    }catch(e){
-      if(!hasLoadedOnce){
-        // 第一次載入且找不到資料，代表這是全新房間，畫面顯示空白即可
-        items = [];
-        hasLoadedOnce = true;
-        renderFeed();
-      }
-      // 已經載入過的情況下發生錯誤，很可能只是暫時性問題：
-      // 保留目前畫面上的內容，不要清空，等下一次同步再試
-    }
-  }
-
-  async function saveItems(){
-    // keep only the most recent MAX_ITEMS to respect size limits
-    if(items.length > MAX_ITEMS){
-      items = items.slice(items.length - MAX_ITEMS);
-    }
-    isSaving = true;
-    try{
-      const result = await window.storage.set(storageKey(), JSON.stringify(items), true);
-      if(!result) throw new Error('儲存失敗');
-    }catch(e){
-      toast('儲存失敗，可能是內容太大或太多，已自動移除最舊的一筆');
-      items.shift();
-      try{ await window.storage.set(storageKey(), JSON.stringify(items), true); }catch(e2){}
-    }finally{
-      isSaving = false;
-    }
+    }, (err) => {
+      console.error(err);
+      toast('連線發生問題，請確認網路連線');
+    });
   }
 
   function fmtTime(ts){
@@ -616,13 +558,10 @@
     });
 
     feed.querySelectorAll('button[data-action="delete"]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        recentlyDeleted.set(btn.dataset.id, Date.now());
-        recentlyAdded.delete(btn.dataset.id);
-        items = items.filter(i => i.id !== btn.dataset.id);
-        renderFeed();
-        await saveItems();
-        toast('已刪除');
+      btn.addEventListener('click', () => {
+        itemsRef.child(btn.dataset.id).remove()
+          .then(() => toast('已刪除'))
+          .catch(() => toast('刪除失敗，請檢查網路連線'));
       });
     });
     feed.querySelectorAll('button[data-action="copy"]').forEach(btn => {
@@ -636,20 +575,24 @@
     });
   }
 
-  function genId(){
-    return Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+  function pruneOldestIfNeeded(){
+    if(items.length < MAX_ITEMS) return;
+    const sorted = [...items].sort((a,b)=> a.ts - b.ts);
+    const toRemove = sorted.slice(0, items.length - MAX_ITEMS + 1);
+    toRemove.forEach(i => itemsRef.child(i.id).remove());
   }
 
-  el('sendTextBtn').addEventListener('click', async () => {
+  el('sendTextBtn').addEventListener('click', () => {
     const val = el('textInput').value.trim();
     if(!val){ toast('請先輸入文字'); return; }
-    const id = genId();
-    recentlyAdded.set(id, Date.now());
-    items.push({ id, type:'text', content: val, ts: Date.now() });
-    renderFeed();
-    el('textInput').value = '';
-    await saveItems();
-    toast('已傳送');
+    if(!itemsRef){ toast('尚未連線到房間'); return; }
+    pruneOldestIfNeeded();
+    itemsRef.push({ type:'text', content: val, ts: Date.now() })
+      .then(() => {
+        el('textInput').value = '';
+        toast('已傳送');
+      })
+      .catch(() => toast('傳送失敗，請檢查網路連線'));
   });
 
   // File handling
@@ -668,29 +611,30 @@
   });
 
   function handleFile(file){
+    if(!itemsRef){ toast('尚未連線到房間'); return; }
     if(file.size > MAX_FILE_BYTES){
       toast('檔案太大，請控制在 3MB 以內');
       return;
     }
     el('fileDropLabel').textContent = '讀取中…';
     const reader = new FileReader();
-    reader.onload = async () => {
-      const id = genId();
-      recentlyAdded.set(id, Date.now());
-      items.push({
-        id,
+    reader.onload = () => {
+      pruneOldestIfNeeded();
+      itemsRef.push({
         type: 'file',
         content: reader.result, // data URL
         name: file.name,
         mime: file.type,
         size: file.size,
         ts: Date.now()
+      }).then(() => {
+        toast('已傳送');
+      }).catch(() => {
+        toast('傳送失敗，檔案可能過大，請檢查網路連線');
+      }).finally(() => {
+        el('fileDropLabel').textContent = '點擊選擇檔案，或拖曳到這裡';
+        fileInput.value = '';
       });
-      renderFeed();
-      el('fileDropLabel').textContent = '點擊選擇檔案，或拖曳到這裡';
-      fileInput.value = '';
-      await saveItems();
-      toast('已傳送');
     };
     reader.onerror = () => {
       toast('讀取檔案失敗');
