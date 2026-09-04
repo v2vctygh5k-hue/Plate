@@ -548,7 +548,7 @@
               <span class="mono">${fmtSize(item.size)}</span>
             </div>
             <div class="item-actions">
-              <a href="${item.content}" download="${item.name}">下載</a>
+              <button data-action="download" data-id="${item.id}">下載</button>
               <button data-action="delete" data-id="${item.id}">刪除</button>
             </div>
           </div>`;
@@ -557,6 +557,13 @@
       feed.appendChild(div);
     });
 
+    feed.querySelectorAll('button[data-action="download"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const found = items.find(i => i.id === btn.dataset.id);
+        if(!found) return;
+        downloadFile(found);
+      });
+    });
     feed.querySelectorAll('button[data-action="delete"]').forEach(btn => {
       btn.addEventListener('click', () => {
         itemsRef.child(btn.dataset.id).remove()
@@ -573,6 +580,24 @@
         }
       });
     });
+  }
+
+  function downloadFile(item){
+    fetch(item.content)
+      .then(res => res.blob())
+      .then(blob => {
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = item.name || 'file';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+      })
+      .catch(() => {
+        toast('下載失敗，可改用長按檔案連結存檔');
+      });
   }
 
   function pruneOldestIfNeeded(){
